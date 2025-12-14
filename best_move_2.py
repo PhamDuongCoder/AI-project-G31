@@ -1,9 +1,5 @@
-"""This is the full featured best_move.py with all optimizations:
-- Minimax with Alpha-Beta Pruning
-- Quiescence Search
-- Move Ordering
-- Killer Move Heuristic"""
-
+"""best_move without killer move heuristic"""
+"""compared to best_move_3, this bot has move ordering, which makes it stronger and faster"""
 import chess
 import random
 from typing import List, Optional
@@ -41,7 +37,6 @@ def get_best_move_minimax(board: chess.Board, depth: int = 3) -> Optional[chess.
     return best_move
 
 MAX_PLY = INITIAL_DEPTH + 8
-killer_moves = [[None, None] for _ in range(MAX_PLY)]
 
 def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta: float, root_color: bool, ply: int = 0) -> float:
     legal_moves = list(board.legal_moves)
@@ -50,10 +45,6 @@ def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta
     scored_moves = []
     for move in legal_moves:
         score = score_move(board, move)
-        if move == killer_moves[ply][0]:
-            score += 10000  # Điểm rất cao, cao hơn cả MVV-LVA tốt nhất
-        elif move == killer_moves[ply][1]:
-            score += 9000 
         scored_moves.append((score, move))
 
     # Sắp xếp theo điểm giảm dần (ưu tiên điểm cao)
@@ -77,11 +68,6 @@ def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta
             if eval_score > alpha:
                 alpha = eval_score
             if beta <= alpha:
-                if not board.is_capture(move) and move.promotion is None:
-                    # Nước đi này vừa gây ra cắt tỉa Beta!
-                    # Lưu trữ nó là Killer Move
-                    killer_moves[ply][1] = killer_moves[ply][0]
-                    killer_moves[ply][0] = move
                 break
         return max_eval
     else:
@@ -95,11 +81,6 @@ def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta
             if eval_score < beta:
                 beta = eval_score
             if beta <= alpha:
-                if not board.is_capture(move) and move.promotion is None:
-                    # Nước đi này vừa gây ra cắt tỉa Beta!
-                    # Lưu trữ nó là Killer Move
-                    killer_moves[ply][1] = killer_moves[ply][0]
-                    killer_moves[ply][0] = move
                 break
         return min_eval
     

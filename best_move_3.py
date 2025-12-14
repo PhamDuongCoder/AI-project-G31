@@ -1,9 +1,6 @@
-"""This is the full featured best_move.py with all optimizations:
-- Minimax with Alpha-Beta Pruning
-- Quiescence Search
-- Move Ordering
-- Killer Move Heuristic"""
-
+"""best_move without killer move heuristic and move ordering"""
+"""compared to best_move_4, this bot has quiescence search, which makes it stronger,
+but much slower"""
 import chess
 import random
 from typing import List, Optional
@@ -41,34 +38,16 @@ def get_best_move_minimax(board: chess.Board, depth: int = 3) -> Optional[chess.
     return best_move
 
 MAX_PLY = INITIAL_DEPTH + 8
-killer_moves = [[None, None] for _ in range(MAX_PLY)]
 
 def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta: float, root_color: bool, ply: int = 0) -> float:
     legal_moves = list(board.legal_moves)
-
-    # Gán điểm cho từng nước đi để sắp xếp
-    scored_moves = []
-    for move in legal_moves:
-        score = score_move(board, move)
-        if move == killer_moves[ply][0]:
-            score += 10000  # Điểm rất cao, cao hơn cả MVV-LVA tốt nhất
-        elif move == killer_moves[ply][1]:
-            score += 9000 
-        scored_moves.append((score, move))
-
-    # Sắp xếp theo điểm giảm dần (ưu tiên điểm cao)
-    # Python sẽ sắp xếp theo phần tử đầu tiên của tuple (score)
-    scored_moves.sort(key=lambda x: x[0], reverse=True)
-
-    # Lấy ra danh sách nước đi đã sắp xếp
-    ordered_moves = [move for score, move in scored_moves]
 
     if depth == 0 or board.is_game_over():
         return quiescence_search(board, alpha, beta, root_color, ply)
     
     if maximizing:
         max_eval = float('-inf')
-        for move in ordered_moves:
+        for move in legal_moves:
             board.push(move)
             eval_score = minimax(board, depth - 1, False, alpha, beta, root_color, ply=ply+1)
             board.pop()
@@ -77,16 +56,11 @@ def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta
             if eval_score > alpha:
                 alpha = eval_score
             if beta <= alpha:
-                if not board.is_capture(move) and move.promotion is None:
-                    # Nước đi này vừa gây ra cắt tỉa Beta!
-                    # Lưu trữ nó là Killer Move
-                    killer_moves[ply][1] = killer_moves[ply][0]
-                    killer_moves[ply][0] = move
                 break
         return max_eval
     else:
         min_eval = float('inf')
-        for move in ordered_moves:
+        for move in legal_moves:
             board.push(move)
             eval_score = minimax(board, depth - 1, True, alpha, beta, root_color, ply=ply+1)
             board.pop()
@@ -95,11 +69,6 @@ def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta
             if eval_score < beta:
                 beta = eval_score
             if beta <= alpha:
-                if not board.is_capture(move) and move.promotion is None:
-                    # Nước đi này vừa gây ra cắt tỉa Beta!
-                    # Lưu trữ nó là Killer Move
-                    killer_moves[ply][1] = killer_moves[ply][0]
-                    killer_moves[ply][0] = move
                 break
         return min_eval
     
@@ -158,7 +127,6 @@ def quiescence_search(board: chess.Board, alpha: float, beta: float, root_color:
         score = score_move(board, move) 
         scored_qmoves.append((score, move))
     
-    scored_qmoves.sort(key=lambda x: x[0], reverse=True)
     ordered_qmoves = [move for score, move in scored_qmoves]
 
     # 4. Duyệt các nước đi
