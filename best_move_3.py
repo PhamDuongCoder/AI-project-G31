@@ -1,5 +1,5 @@
 """best_move without killer move heuristic and move ordering"""
-"""compared to best_move_4, this bot has quiescence search, which makes it stronger,
+"""Compared to best_move_4, this bot has quiescence search, which makes it stronger,
 but much slower"""
 import chess
 import random

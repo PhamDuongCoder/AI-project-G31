@@ -2,7 +2,7 @@ import pygame
 import chess
 import os
 from typing import Optional, Tuple, List
-from best_move_4 import get_best_move_minimax
+from best_move_promax import get_best_move_minimax
 import game_state
 
 # Initialize Pygame
