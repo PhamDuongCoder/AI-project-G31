@@ -2,7 +2,10 @@ import pygame
 import chess
 import os
 from typing import Optional, Tuple, List
-from best_move_promax import get_best_move_minimax
+import time
+import threading
+import traceback
+import best_move_5
 import game_state
 
 # Initialize Pygame
@@ -52,7 +55,18 @@ class ChessGame:
         self.promotion_square = None
         self.promotion_from_square = None
         self.promotion_pieces = ['Q', 'R', 'N', 'B']  # Queen, Rook, Knight, Bishop
-        
+
+        # AI configuration & runtime state
+        # Use depth from the AI module by default, allow override via self.ai_depth
+        self.ai_depth = getattr(best_move_5, 'INITIAL_DEPTH', 3)
+        self.ai_thinking = False
+        self.ai_thread: Optional[threading.Thread] = None
+        self.ai_move_result: Optional[chess.Move] = None
+        self.ai_move_ready = False
+        self.last_ai_time: Optional[float] = None
+        self.ai_exception: Optional[str] = None
+        self.ai_lock = threading.Lock()
+        self.ai_generation = 0  # used to invalidate stale worker results        
     def load_piece_images(self) -> dict:
         """Load all piece images from the img folder."""
         piece_images = {}
@@ -149,13 +163,20 @@ class ChessGame:
         player_text = f"Playing as: {'White' if self.player_color == chess.WHITE else 'Black'}"
         player_surface = self.font.render(player_text, True, WHITE)
         self.screen.blit(player_surface, (BOARD_SIZE + 10, 50))
+
+        # AI thinking indicator & last time
+        if self.ai_thinking:
+            thinking_surface = self.font.render("Thinking...", True, (255, 255, 0))
+            self.screen.blit(thinking_surface, (BOARD_SIZE + 10, 80))
+        elif self.last_ai_time is not None:
+            time_surface = self.font.render(f"Last AI: {self.last_ai_time:.2f}s", True, WHITE)
+            self.screen.blit(time_surface, (BOARD_SIZE + 10, 80))
         
         # Draw game status
         if self.board.is_check():
             check_text = "CHECK!"
             check_surface = self.large_font.render(check_text, True, (255, 0, 0))
-            self.screen.blit(check_surface, (BOARD_SIZE + 10, 80))
-        
+            self.screen.blit(check_surface, (BOARD_SIZE + 10, 110))        
         # Draw restart button
         restart_rect = pygame.Rect(BOARD_SIZE + 10, 120, 150, 30)
         pygame.draw.rect(self.screen, (100, 100, 100), restart_rect)
@@ -472,25 +493,95 @@ class ChessGame:
                     else:
                         self.selected_square = None
     
-    def get_best_move_minimax(self) -> chess.Move:
-        """Get a move for the AI using the best_move module."""
-        return get_best_move_minimax(self.board)
+    def get_best_move_minimax(self) -> Optional[chess.Move]:
+        """Get a move for the AI using the best_move module (uses configured depth)."""
+        # Call into the optimized AI module and pass the configured depth
+        try:
+            return best_move_5.get_best_move_minimax(self.board, depth=self.ai_depth)
+        except Exception as e:
+            # Higher-level code will handle/display the error; return None to avoid crashing
+            print(f"Error generating AI move: {e}")
+            traceback.print_exc()
+            return None
     
-    def make_ai_move(self):
-        """Make the AI's move."""
-        # Skip if the player just moved (draw their move first before AI starts thinking)
-        if self.player_just_moved:
-            self.player_just_moved = False
+    def start_ai_think(self):
+        """Start AI thinking in a background thread (non-blocking)."""
+        # Do not start if already thinking
+        if self.ai_thinking:
             return
-        
-        if not self.game_over and self.board.turn != self.player_color:
-            move = self.get_best_move_minimax()
-            self.board.push(move)
-            self.move_count += 1
-            if self.move_count == 10:
-                game_state.game_phase = 1
-            
-            # Check for game over after AI move
+
+        # Snapshot board to avoid concurrency issues
+        board_snapshot = self.board.copy()
+        self.ai_thinking = True
+        self.ai_move_ready = False
+        self.ai_move_result = None
+        self.ai_exception = None
+        self.ai_generation += 1
+        generation = self.ai_generation
+
+        def worker(board_snapshot, gen):
+            start = time.perf_counter()
+            try:
+                move = best_move_5.get_best_move_minimax(board_snapshot, depth=self.ai_depth)
+                duration = time.perf_counter() - start
+                with self.ai_lock:
+                    if gen != self.ai_generation:
+                        return  # stale result
+                    self.ai_move_result = move
+                    self.last_ai_time = duration
+                    self.ai_exception = None
+                    self.ai_move_ready = True
+            except IndexError as e:
+                duration = time.perf_counter() - start
+                tb = traceback.format_exc()
+                with self.ai_lock:
+                    if gen != self.ai_generation:
+                        return
+                    self.ai_move_result = None
+                    self.last_ai_time = duration
+                    self.ai_exception = f"IndexError: {e}\n{tb}"
+                    self.ai_move_ready = True
+            except Exception as e:
+                duration = time.perf_counter() - start
+                tb = traceback.format_exc()
+                with self.ai_lock:
+                    if gen != self.ai_generation:
+                        return
+                    self.ai_move_result = None
+                    self.last_ai_time = duration
+                    self.ai_exception = f"{type(e).__name__}: {e}\n{tb}"
+                    self.ai_move_ready = True
+            finally:
+                with self.ai_lock:
+                    self.ai_thinking = False
+
+        self.ai_thread = threading.Thread(target=worker, args=(board_snapshot, generation), daemon=True)
+        self.ai_thread.start()
+        print("AI started thinking...")
+
+    def finish_ai_move(self):
+        """Apply AI move result if ready; non-blocking so safe to call each frame."""
+        with self.ai_lock:
+            if not self.ai_move_ready:
+                return
+            move = self.ai_move_result
+            exc = self.ai_exception
+            duration = self.last_ai_time
+            # Reset flags (we've consumed the result)
+            self.ai_move_ready = False
+            self.ai_move_result = None
+            self.ai_exception = None
+            self.last_ai_time = None
+
+        if duration is not None:
+            print(f"AI thinking time: {duration:.3f}s")
+
+        if exc:
+            print(f"AI search error:\n{exc}")
+            return
+
+        # If AI returned None, check for game over or skip safely
+        if move is None:
             if self.board.is_game_over():
                 self.game_over = True
                 if self.board.is_checkmate():
@@ -498,7 +589,54 @@ class ChessGame:
                 else:
                     self.winner = None
                 self.show_game_over = True
-    
+            else:
+                print("AI returned no move; skipping AI turn.")
+            return
+
+        # Apply the move safely
+        try:
+            if move in self.board.legal_moves:
+                self.board.push(move)
+                self.move_count += 1
+                if self.move_count == 10:
+                    game_state.game_phase = 1
+
+                # Check for game over after AI move
+                if self.board.is_game_over():
+                    self.game_over = True
+                    if self.board.is_checkmate():
+                        self.winner = "White" if self.board.turn == chess.BLACK else "Black"
+                    else:
+                        self.winner = None
+                    self.show_game_over = True
+            else:
+                print("AI suggested illegal move:", move)
+        except Exception as e:
+            print("Error applying AI move:", e)
+            traceback.print_exc()
+
+    def make_ai_move(self):
+        """Non-blocking AI orchestration called each frame from the main loop."""
+        # Skip if the player just moved (draw their move first before AI starts thinking)
+        if self.player_just_moved:
+            self.player_just_moved = False
+            return
+
+        # If game over or it's player's turn, nothing to do
+        if self.game_over or self.board.turn == self.player_color:
+            return
+
+        # If result is ready, finish it now
+        self.finish_ai_move()
+
+        # If it's still player's turn, nothing to do
+        if self.board.turn == self.player_color:
+            return
+
+        # If not thinking and no result pending, start thinking
+        if not self.ai_thinking and not self.ai_move_ready:
+            self.start_ai_think()    
+
     def reset_game(self):
         """Reset the game to initial state."""
         self.board = chess.Board()
@@ -511,7 +649,15 @@ class ChessGame:
         self.player_just_moved = False
         self.promotion_square = None
         self.promotion_from_square = None
-    
+
+        # Invalidate any ongoing AI work and reset AI state
+        with self.ai_lock:
+            self.ai_generation += 1
+            self.ai_thinking = False
+            self.ai_move_result = None
+            self.ai_move_ready = False
+            self.ai_exception = None
+            self.last_ai_time = None    
     def run(self):
         """Main game loop."""
         running = True

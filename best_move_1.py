@@ -1,13 +1,20 @@
-"""This is the full featured best_move.py with all optimizations:
-- Minimax with Alpha-Beta Pruning
-- Quiescence Search
-- Move Ordering
-- Killer Move Heuristic"""
+# Full optimization: Killer Moves + Move Ordering + Quiescence + Alpha-Beta
+"""This is the best_move.py """
 
 import chess
 import random
 from typing import List, Optional
 import game_state
+
+# giá trị quân cờ
+EVAL_PIECE_VALUES = {
+    chess.PAWN: 1,
+    chess.KNIGHT: 3,
+    chess.BISHOP: 3,
+    chess.ROOK: 5,
+    chess.QUEEN: 9,
+    chess.KING: 0
+}
 
 INITIAL_DEPTH = 3
 
@@ -17,7 +24,7 @@ def get_ai_move(board: chess.Board) -> Optional[chess.Move]:
 
     if not legal_moves:
         return None
-    return get_best_move_minimax(board, depth=3)
+    return get_best_move_minimax(board, INITIAL_DEPTH)
 
 def get_best_move_minimax(board: chess.Board, depth: int = 3) -> Optional[chess.Move]:
     """Return best move found by minimax (alpha-beta) from the current board."""
@@ -40,7 +47,7 @@ def get_best_move_minimax(board: chess.Board, depth: int = 3) -> Optional[chess.
 
     return best_move
 
-MAX_PLY = INITIAL_DEPTH + 8
+MAX_PLY = 64
 killer_moves = [[None, None] for _ in range(MAX_PLY)]
 
 def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta: float, root_color: bool, ply: int = 0) -> float:
@@ -51,7 +58,7 @@ def minimax(board: chess.Board, depth: int, maximizing: bool, alpha: float, beta
     for move in legal_moves:
         score = score_move(board, move)
         if move == killer_moves[ply][0]:
-            score += 10000  # Điểm rất cao, cao hơn cả MVV-LVA tốt nhất
+            score += 10000  
         elif move == killer_moves[ply][1]:
             score += 9000 
         scored_moves.append((score, move))
@@ -133,39 +140,33 @@ def score_move(board: chess.Board, move: chess.Move) -> int:
     return score
 
 def quiescence_search(board: chess.Board, alpha: float, beta: float, root_color: bool, ply: int) -> float:
-    # 1. Đánh giá tĩnh (Stand-pat)
-    # Giả định evaluate_position trả về điểm tuyệt đối (Trắng +, Đen -)
     stand_pat = evaluate_position(board, root_color, ply)
 
-    # 2. Xử lý Logic Cắt tỉa (Tách biệt Trắng/Đen)
-    if board.turn == chess.WHITE:  # Maximizing Player (Trắng)
+    # Kiểm tra xem bên đang đi có phải là root_color không
+    if board.turn == root_color:  # Maximizing Player (AI)
         if stand_pat >= beta:
             return beta
         if stand_pat > alpha:
             alpha = stand_pat
-    else:  # Minimizing Player (Đen)
+    else:  # Minimizing Player (Đối thủ)
         if stand_pat <= alpha:
             return alpha
         if stand_pat < beta:
             beta = stand_pat
 
-    # 3. Tạo và Sắp xếp nước đi Động (Chỉ bắt quân)
     dynamic_moves = [move for move in board.legal_moves if board.is_capture(move)]
     
     scored_qmoves = []
     for move in dynamic_moves:
-        # Dùng lại hàm score_move để lấy điểm MVV-LVA
         score = score_move(board, move) 
         scored_qmoves.append((score, move))
     
     scored_qmoves.sort(key=lambda x: x[0], reverse=True)
     ordered_qmoves = [move for score, move in scored_qmoves]
 
-    # 4. Duyệt các nước đi
-    if board.turn == chess.WHITE: # Trắng tìm Max
+    if board.turn == root_color:  # AI đang đi → tìm Max
         for move in ordered_qmoves:
             board.push(move)
-            # Gọi đệ quy Minimax-style (giữ nguyên alpha/beta, không đảo dấu)
             score = quiescence_search(board, alpha, beta, root_color, ply + 1)
             board.pop()
 
@@ -175,7 +176,7 @@ def quiescence_search(board: chess.Board, alpha: float, beta: float, root_color:
                 alpha = score
         return alpha
     
-    else: # Đen tìm Min
+    else:  # Đối thủ đang đi → tìm Min
         for move in ordered_qmoves:
             board.push(move)
             score = quiescence_search(board, alpha, beta, root_color, ply + 1)
@@ -190,26 +191,19 @@ def quiescence_search(board: chess.Board, alpha: float, beta: float, root_color:
 def evaluate_position(board: chess.Board, root_color: bool, ply: int = 0) -> float:
     """Evaluate the board from the point of view of root_color (True for WHITE, False for BLACK)."""
     MATE_SCORE = 100000
-    # Terminal conditions
+    # Điều kiện kết thúc ván cờ
     if board.is_checkmate():
-        # side to move is checkmated
+        # Nếu đến lượt root_color mà bị chiếu hết, thì thua
         if board.turn == root_color:
             return -MATE_SCORE + ply
         else:
             return MATE_SCORE - ply
 
-    # draw conditions
+    # điều kiện hòa
     if board.is_stalemate() or board.is_insufficient_material() or board.can_claim_threefold_repetition():
         return 0.0
 
-    piece_values = {
-        chess.PAWN: 1,
-        chess.KNIGHT: 3,
-        chess.BISHOP: 3,
-        chess.ROOK: 5,
-        chess.QUEEN: 9,
-        chess.KING: 0
-    }
+    piece_values = EVAL_PIECE_VALUES
 
     score = 0.0
 
@@ -222,8 +216,7 @@ def evaluate_position(board: chess.Board, root_color: bool, ply: int = 0) -> flo
             else:
                 score -= value
 
-    # Check piece count on board and update game phase if endgame threshold reached
-    # Use the new rule: transition to endgame when there are fewer than 15 pieces on the board
+    # Sang tàn cuộc nếu còn dưới 15 quân
     piece_count = len(board.piece_map())
     if piece_count < 15 and game_state.game_phase == 1:
         game_state.game_phase = 2
@@ -243,7 +236,7 @@ def evaluate_position(board: chess.Board, root_color: bool, ply: int = 0) -> flo
 
 def evaluate_opening(board: chess.Board, root_color: bool) -> float:
     """Evaluate the board specifically for the opening phase."""
-    # Simple opening evaluation: prioritize development and center control
+    # Đánh giá mở màn đơn giản: ưu tiên phát triển và kiểm soát trung tâm
     opening_score = 0.0
 
     center_squares = [chess.D4, chess.D5, chess.E4, chess.E5]
@@ -268,7 +261,7 @@ def evaluate_opening(board: chess.Board, root_color: bool) -> float:
             else:
                 opening_score += 0.3
 
-    # Castling bonus: +1 if the playing side's king is castled, -1 if opponent's king is castled
+    # Bonus nhập thành: +1 nếu vua của phe đang đi đã nhập thành, -1 nếu vua của đối thủ đã nhập thành
     def king_has_castled(bd: chess.Board, color: bool) -> bool:
         ks = bd.king(color)
         if ks is None:
@@ -287,7 +280,7 @@ def evaluate_opening(board: chess.Board, root_color: bool) -> float:
 
 def evaluate_middlegame(board: chess.Board, root_color: bool) -> float:
     """Evaluate the board specifically for the middlegame phase."""
-    # Simple middlegame evaluation: prioritize piece activity and king safety
+    # Đánh giá trung cuộc: ưu tiên hoạt động của quân cờ và an toàn của vua
     middlegame_score = 0.0
 
     king_safety_score = king_safety(board, root_color)
@@ -301,66 +294,39 @@ def evaluate_middlegame(board: chess.Board, root_color: bool) -> float:
     return middlegame_score
 
 def king_safety(board: chess.Board, root_color: bool) -> float:
-    """Simple king safety heuristic: counts friendly pawns in front of king as shield.
+    """Simple king safety: bonus if castled, penalty if not castled.
     
     Positive values favor root_color.
     """
     total = 0.0
+    
     for color in [chess.WHITE, chess.BLACK]:
         king_sq = board.king(color)
         if king_sq is None:
             continue
-
-        # King neighborhood control (2-square radius)
-        radius_score = 0.0
-        king_file = chess.square_file(king_sq)
-        king_rank = chess.square_rank(king_sq)
-
-        # Precompute attack sets for both colors to speed checks
-        friendly_attacks = set()
-        enemy_attacks = set()
-        for sq in chess.SQUARES:
-            p = board.piece_at(sq)
-            if not p:
-                continue
-            attacks = board.attacks(sq)
-            if p.color == color:
-                friendly_attacks.update(attacks)
-            else:
-                enemy_attacks.update(attacks)
-
-        for df in range(-2, 3):
-            for dr in range(-2, 3):
-                if df == 0 and dr == 0:
-                    continue
-                f = king_file + df
-                r = king_rank + dr
-                if not (0 <= f <= 7 and 0 <= r <= 7):
-                    continue
-                sq = chess.square(f, r)
-
-                occ = board.piece_at(sq)
-                if occ:
-                    # Occupied by friendly or enemy piece
-                    if occ.color == color:
-                        radius_score += 0.1
-                    else:
-                        radius_score -= 0.1
-                else:
-                    # Empty: check control
-                    if sq in friendly_attacks:
-                        radius_score += 0.1
-                    if sq in enemy_attacks:
-                        radius_score -= 0.1
-
-        # Combine shield and radius for this king; add if root_color, subtract if opponent
-        king_contrib = radius_score
-        if color == root_color:
-            total += king_contrib
+        
+        # Kiểm tra nhập thành
+        is_castled = False
+        if color == chess.WHITE:
+            if king_sq in [chess.G1, chess.C1]:
+                is_castled = True
+        else:  # BLACK
+            if king_sq in [chess.G8, chess.C8]:
+                is_castled = True
+        
+        # Assign bonus/penalty
+        if is_castled:
+            king_score = 0.5  # Điểm thưởng nhập thành
         else:
-            total -= king_contrib
-
-    return total  
+            king_score = -0.3  # Điểm phạt không nhập thành
+        
+        # Thêm điểm vào tổng
+        if color == root_color:
+            total += king_score
+        else:
+            total -= king_score
+    
+    return total
 
 def rook_open_files(board: chess.Board, root_color: bool) -> float:
     """Evaluate rook activity on open and semi-open files.
@@ -386,13 +352,13 @@ def rook_open_files(board: chess.Board, root_color: bool) -> float:
                         has_enemy_pawn = True
 
             if not has_friendly_pawn and not has_enemy_pawn:
-                # Open file
+                # Cột mở
                 if color == root_color:
                     total += 0.5
                 else:
                     total -= 0.5
             elif not has_friendly_pawn and has_enemy_pawn:
-                # Semi-open file
+                # Cột nửa mở
                 if color == root_color:
                     total += 0.2
                 else:
@@ -401,8 +367,8 @@ def rook_open_files(board: chess.Board, root_color: bool) -> float:
     return total
 
 def bishop_score(board: chess.Board, root_color: bool) -> float:
-    #for each bishop of the playing side, give 0.1 points for each forward square and 0.05 square for each backward square it controls
-    #for each bishop of the opponent side, subtract 0.1 points for each forward square and 0.05 square for each backward square it controls
+    #Với mỗi quân tượng của phe mình, cộng 0.1 điểm cho mỗi ô tiến lên và 0.05 điểm cho mỗi ô lùi nó kiểm soát
+    #Ngược lại với quân tượng của phe địch, trừ điểm tương ứng
     total = 0.0
     for color in [chess.WHITE, chess.BLACK]:
         bishops = board.pieces(chess.BISHOP, color)
@@ -410,10 +376,10 @@ def bishop_score(board: chess.Board, root_color: bool) -> float:
             bishop_file = chess.square_file(bishop_sq)
             bishop_rank = chess.square_rank(bishop_sq)
 
-            # Determine forward and backward directions
+            # Xác định hướng tiến lên của quân
             forward_dir = 1 if color == chess.WHITE else -1
 
-            # Get all squares attacked by the bishop
+            # Lấy các ô bị tấn công bởi con tượng
             attacked_squares = board.attacks(bishop_sq)
 
             for sq in attacked_squares:
@@ -447,12 +413,12 @@ def knight_outposts(board: chess.Board, root_color: bool) -> float:
             knight_file = chess.square_file(knight_sq)
             knight_rank = chess.square_rank(knight_sq)
 
-            # Determine forward direction
+            # Xác định hướng tiến lên của quân
             forward_dir = 1 if color == chess.WHITE else -1
 
-            # Check if knight is on an outpost (4th rank or beyond without enemy pawns controlling it)
+            # Kiểm tra "outpost" của quân mã
             if (color == chess.WHITE and knight_rank >= 3) or (color == chess.BLACK and knight_rank <= 4):
-                # Check if any enemy pawns control this square
+                # Kiểm tra nếu không có tốt địch kiểm soát các ô phía sau
                 is_outpost = True
                 for df in [-1, 1]:
                     f = knight_file + df
@@ -473,18 +439,11 @@ def knight_outposts(board: chess.Board, root_color: bool) -> float:
     return total
 
 def queen_activity(board: chess.Board, root_color: bool) -> float:
-    #Evaluate queen activity based on the number of enemy pieces it attacks and friendly pieces it defends
-    #for each enemy piece it attacks, add 10% the attacked piece's value points; for each friendly piece it defends, add 10% of the piece's value points
+    #Đánh giá hoạt động của quân hậu dựa trên số lượng quân địch nó tấn công và quân mình nó bảo vệ
+    #cho mỗi quân địch nó tấn công, cộng 10% giá trị của quân đó; cho mỗi quân mình nó bảo vệ, cộng 10% giá trị của quân đó
     total = 0.0
     
-    piece_values = {
-        chess.PAWN: 1,
-        chess.KNIGHT: 3,
-        chess.BISHOP: 3,
-        chess.ROOK: 5,
-        chess.QUEEN: 9,
-        chess.KING: 0
-    }
+    piece_values = EVAL_PIECE_VALUES
     
     for color in [chess.WHITE, chess.BLACK]:
         queens = board.pieces(chess.QUEEN, color)
@@ -500,14 +459,14 @@ def queen_activity(board: chess.Board, root_color: bool) -> float:
                 piece_value = piece_values.get(piece.piece_type, 0)
                 
                 if piece.color != color:
-                    # Enemy piece: add 10% of its value
+                    # Cộng điểm cho quân địch bị tấn công (10% của giá trị quân đó)
                     activity_bonus = 0.1 * piece_value
                     if color == root_color:
                         total += activity_bonus
                     else:
                         total -= activity_bonus
                 else:
-                    # Friendly piece: defend bonus (10% of its value)
+                    # Cộng điểm cho quân mình được bảo vệ (10% của giá trị quân đó)
                     defense_bonus = 0.1 * piece_value
                     if color == root_color:
                         total += defense_bonus
@@ -519,45 +478,114 @@ def queen_activity(board: chess.Board, root_color: bool) -> float:
 def evaluate_endgame(board: chess.Board, root_color: bool) -> float:
     """
     Hàm đánh giá Cờ tàn tối ưu: 
-    Kết hợp King Activity, Passed Pawn Score và King Proximity to Passed Pawns.
+    Kết hợp King Activity, Passed Pawn Score, King Proximity to Passed Pawns
+    VÀ Logic dồn Vua đối phương vào góc + BAO VÂY để chiếu hết.
     """
     endgame_score = 0.0
     
-    # 1. KING VS KING 
-    # Khuyến khích Vua phe mình tiến về phía Vua đối phương (hoặc chiếm trung tâm)
     root_king = board.king(root_color)
     opp_king = board.king(not root_color)
-    
+
+    # Xây dựng tập hợp các ô bị kiểm soát bởi mỗi bên
+    attacks_union = {chess.WHITE: set(), chess.BLACK: set()}
+    for sq in chess.SQUARES:
+        p = board.piece_at(sq)
+        if not p:
+            continue
+        attacks_union[p.color].update(board.attacks(sq))
+
+    # --- 1. MOP-UP EVALUATION (DỒN VUA VÀO GÓC) ---
+    piece_vals_small = {chess.PAWN:1, chess.KNIGHT:3, chess.BISHOP:3, chess.ROOK:5, chess.QUEEN:9, chess.KING:0}
+    my_material = 0
+    opp_material = 0
+    for sq, p in board.piece_map().items():
+        if p.color == root_color:
+            my_material += piece_vals_small.get(p.piece_type, 0)
+        else:
+            opp_material += piece_vals_small.get(p.piece_type, 0)
+    material_advantage = my_material - opp_material
+
+    if opp_king is not None and root_king is not None:
+        # Khoảng cách từ vua đến trung tâm bàn cờ (e4,d4,e5,d5)
+        root_center_dist = abs(chess.square_file(root_king) - 3.5) + abs(chess.square_rank(root_king) - 3.5)
+        opp_center_dist = abs(chess.square_file(opp_king) - 3.5) + abs(chess.square_rank(opp_king) - 3.5)
+
+        # Cộng điểm nếu vua mình gần trung tâm hơn vua đối phương
+        endgame_score += (opp_center_dist - root_center_dist) * 0.1
+
+        # Nếu chúng ta có lợi thế vật chất rõ rệt, tăng động lực đẩy đối thủ vào góc
+        MOPUP_MATERIAL_THRESH = 3
+        if material_advantage >= MOPUP_MATERIAL_THRESH:
+            endgame_score += (opp_center_dist - root_center_dist) * 0.2
+
+        # Th
+        dist_between_kings = abs(chess.square_file(root_king) - chess.square_file(opp_king)) + \
+                             abs(chess.square_rank(root_king) - chess.square_rank(opp_king))
+        endgame_score += (14 - dist_between_kings) * 0.05
+
+        # --- NEW: BAO VÂY VUA ĐỐI PHƯƠNG KHI ĐÃ DỒN VÀO GÓC ---
+        # Chỉ áp dụng khi vua đối phương đã ở xa trung tâm (đã bị dồn vào góc)
+        CORNER_THRESHOLD = 4.5  # Khoảng cách từ center, nếu > 4.5 là gần góc
+        if opp_center_dist >= CORNER_THRESHOLD and material_advantage >= MOPUP_MATERIAL_THRESH:
+            # Lấy tất cả ô adjacent với vua đối phương
+            opp_king_file = chess.square_file(opp_king)
+            opp_king_rank = chess.square_rank(opp_king)
+            
+            adjacent_squares = []
+            for df in [-1, 0, 1]:
+                for dr in [-1, 0, 1]:
+                    if df == 0 and dr == 0:  # Skip vua itself
+                        continue
+                    f = opp_king_file + df
+                    r = opp_king_rank + dr
+                    if 0 <= f <= 7 and 0 <= r <= 7:
+                        adjacent_squares.append(chess.square(f, r))
+            
+            # Đếm bao nhiêu ô adjacent được kiểm soát bởi quân của mình
+            controlled_count = 0
+            controlling_pieces = set()  # Xem những quân nào kiểm soát ô gần vua đối phương
+            
+            for adj_sq in adjacent_squares:
+                if adj_sq in attacks_union[root_color]:
+                    controlled_count += 1
+                    
+                    # Tìm quân nào đang kiểm soát ô này
+                    for sq in chess.SQUARES:
+                        p = board.piece_at(sq)
+                        if p and p.color == root_color and adj_sq in board.attacks(sq):
+                            controlling_pieces.add(sq)
+            
+            # Thưởng điểm cho việc kiểm soát nhiều ô xung quanh vua đối phương
+            endgame_score += controlled_count * 0.3
+            
+            # Thưởng điểm ĐẶC BIỆT nếu có ít nhất 2 quân khác nhau tham gia bao vây
+            if len(controlling_pieces) >= 2:
+                endgame_score += 1.5  # Bonus lớn khi có coordination
+            
+            # Thưởng điểm thêm nếu kiểm soát hầu hết các ô (gần chiếu hết)
+            if controlled_count >= 5:  # Vua có tối đa 8 ô adjacent
+                endgame_score += 2.0  # Gần chiếu hết rồi!
+
+    # --- 2. LOGIC CŨ: KING VS KING ---
     if root_king is not None and opp_king is not None:
         root_king_dist = abs(chess.square_file(root_king) - chess.square_file(opp_king)) + \
                          abs(chess.square_rank(root_king) - chess.square_rank(opp_king))
         opp_king_dist = abs(chess.square_file(opp_king) - chess.square_file(root_king)) + \
                         abs(chess.square_rank(opp_king) - chess.square_rank(root_king))
         
-        # Nếu đang ưu thế, Vua cần tích cực.
-        endgame_score += (opp_king_dist - root_king_dist) * 0.2
-
-    # Biến lưu vị trí Tốt thông cao nhất để tính điểm King Activity sau này
-    # (Rank, Square)
+        endgame_score += (opp_king_dist - root_king_dist) * 0.1
+        
+    # --- 3. PASSED PAWN EVALUATION (TỐT THÔNG) ---
     most_advanced_passed_pawn = {chess.WHITE: (-1, None), chess.BLACK: (-1, None)}
 
-    # 2. XỬ LÝ TỐT (PASSED PAWN & ADVANCEMENT)
-    # Duyệt qua tất cả các quân Tốt một lần duy nhất
     for color in [chess.WHITE, chess.BLACK]:
         pawns = board.pieces(chess.PAWN, color)
-        
-        # Xác định hướng tiến lên
-        forward_dir = 1 if color == chess.WHITE else -1
-        # Xác định hàng đích (rank 7 cho Trắng, rank 0 cho Đen)
-        promotion_rank = 7 if color == chess.WHITE else 0
         
         for pawn_sq in pawns:
             file = chess.square_file(pawn_sq)
             rank = chess.square_rank(pawn_sq)
             
-            # --- Logic kiểm tra Passed Pawn (Tốt thông) ---
             is_passed = True
-            # Kiểm tra file hiện tại và 2 file bên cạnh xem có Tốt địch chặn đường không
             check_ranks = range(rank + 1, 8) if color == chess.WHITE else range(rank - 1, -1, -1)
             
             for df in [-1, 0, 1]:
@@ -566,97 +594,77 @@ def evaluate_endgame(board: chess.Board, root_color: bool) -> float:
                     for r in check_ranks:
                         sq = chess.square(f, r)
                         piece = board.piece_at(sq)
-                        # Nếu gặp Tốt địch chắn trước mặt hoặc ở cột bên cạnh -> Không phải Tốt thông
                         if piece and piece.piece_type == chess.PAWN and piece.color != color:
                             is_passed = False
                             break
                 if not is_passed:
                     break
             
-            # Tính điểm cho Tốt
             pawn_score = 0.0
             advancement = rank if color == chess.WHITE else (7 - rank)
             
             if is_passed:
-                # A. Điểm cơ bản cho Tốt thông + Độ tiến xa
-                passed_pawn_bonus = 0.2 + (advancement * 0.1) # Tăng trọng số khi tiến xa
-                
-                # B. Điểm kiểm soát ô phía trước (Control Bonus)
-                # Kiểm tra các ô phía trước trên cùng cột
+                passed_pawn_bonus = 0.2 + (advancement * 0.1)
                 friendly_control = False
                 opp_control = False
-                
                 for r in check_ranks:
-                    sq = chess.square(file, r)
-                    if board.attackers(color, sq):
-                        friendly_control = True
-                    if board.attackers(not color, sq):
-                        opp_control = True
-                    if friendly_control and opp_control: # Chỉ cần biết có hay không
-                        break
+                    if 0 <= r <= 7:
+                        target_sq = chess.square(file, r)
+                        if target_sq in attacks_union[color]:
+                            friendly_control = True
+                        if target_sq in attacks_union[not color]:
+                            opp_control = True
+                        if friendly_control and opp_control:
+                            break
                 
-                if friendly_control:
-                    passed_pawn_bonus += 0.15
-                if opp_control:
-                    passed_pawn_bonus -= 0.15
+                if friendly_control: passed_pawn_bonus += 0.15
+                if opp_control: passed_pawn_bonus -= 0.15
                 
                 pawn_score += passed_pawn_bonus
                 
-                # C. Cập nhật Tốt thông tiến xa nhất (cho phần King Activity)
                 current_best_rank = most_advanced_passed_pawn[color][0]
-                if advancement > current_best_rank: # advancement càng cao càng tốt cho cả 2 màu
+                if advancement > current_best_rank:
                      most_advanced_passed_pawn[color] = (advancement, pawn_sq)
             else:
-                # Nếu không phải Tốt thông, vẫn thưởng nhẹ nếu Tốt đã tiến sâu (để tránh thụ động)
-                # Đây là phần thay thế cho logic cũ "endgame_score += advancement * 0.1"
                 pawn_score += advancement * 0.05
 
-            # Cộng điểm tổng
-            if color == root_color:
-                endgame_score += pawn_score
-            else:
-                endgame_score -= pawn_score
+            if color == root_color: endgame_score += pawn_score
+            else: endgame_score -= pawn_score
 
-    # 3. KING ACTIVITY vs PASSED PAWN (Tích hợp logic từ hàm king_activity)
-    # Logic: Vua phe ta nên ở gần Tốt thông phe ta (để hộ tống) VÀ gần Tốt thông phe địch (để chặn)
-    
     if root_king is not None:
         king_file = chess.square_file(root_king)
         king_rank = chess.square_rank(root_king)
         
-        # 3a. Hỗ trợ Tốt thông phe mình (Root Color Passed Pawn)
-        best_adv, best_sq = most_advanced_passed_pawn[root_color]
+        # 3a. Hỗ trợ Tốt thông phe mình
+        _, best_sq = most_advanced_passed_pawn[root_color]
         if best_sq is not None:
             pawn_file = chess.square_file(best_sq)
             pawn_rank = chess.square_rank(best_sq)
             distance = abs(king_file - pawn_file) + abs(king_rank - pawn_rank)
-            # Càng gần càng tốt: Thưởng điểm
             endgame_score += (14 - distance) * 0.1
 
-        # 3b. Chặn Tốt thông phe địch (Enemy Color Passed Pawn)
-        best_adv_enemy, best_sq_enemy = most_advanced_passed_pawn[not root_color]
+        # 3b. Chặn Tốt thông phe địch
+        _, best_sq_enemy = most_advanced_passed_pawn[not root_color]
         if best_sq_enemy is not None:
             pawn_file = chess.square_file(best_sq_enemy)
             pawn_rank = chess.square_rank(best_sq_enemy)
             distance = abs(king_file - pawn_file) + abs(king_rank - pawn_rank)
-            # Càng gần càng tốt: Thưởng điểm (để chạy tới chặn)
-            endgame_score += (14 - distance) * 0.15 # Trọng số cao hơn chút vì chặn nguy hiểm quan trọng hơn
+            endgame_score += (14 - distance) * 0.15
 
-    # Tương tự tính cho Vua đối phương (để trừ điểm nếu nó làm tốt việc này)
     if opp_king is not None:
         king_file = chess.square_file(opp_king)
         king_rank = chess.square_rank(opp_king)
         
-        # Opponent King supports Opponent Passed Pawn
-        best_adv_enemy, best_sq_enemy = most_advanced_passed_pawn[not root_color]
+        # Vua đối phương hỗ trợ tốt thông đối phương
+        _, best_sq_enemy = most_advanced_passed_pawn[not root_color]
         if best_sq_enemy is not None:
             pawn_file = chess.square_file(best_sq_enemy)
             pawn_rank = chess.square_rank(best_sq_enemy)
             distance = abs(king_file - pawn_file) + abs(king_rank - pawn_rank)
             endgame_score -= (14 - distance) * 0.1
 
-        # Opponent King blocks Root Passed Pawn
-        best_adv, best_sq = most_advanced_passed_pawn[root_color]
+        # Vua đối phương chặn tốt thông của mình
+        _, best_sq = most_advanced_passed_pawn[root_color]
         if best_sq is not None:
             pawn_file = chess.square_file(best_sq)
             pawn_rank = chess.square_rank(best_sq)
