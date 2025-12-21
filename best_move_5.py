@@ -32,18 +32,32 @@ def get_best_move_minimax(board: chess.Board, depth: int = 3) -> Optional[chess.
         return None
 
     root_color = board.turn
-    best_move: Optional[chess.Move] = legal_moves[0]
-    best_score = float('-inf')
+    
+    # Lưu tất cả nước đi và điểm vào list
+    move_scores = []
 
     for move in legal_moves:
         board.push(move)
-        score = minimax(board, depth - 1, False, float('-inf'), float('inf'), root_color, ply=1)
+        will_repeat = board.is_repetition(count=2)
+        score = minimax(board, depth - 1, False, root_color, ply=1)
         board.pop()
+        
+        move_scores.append((score, move, will_repeat))
 
-        if score > best_score:
-            best_score = score
-            best_move = move
-
+    # Sắp xếp theo điểm giảm dần
+    move_scores.sort(key=lambda x: x[0], reverse=True)
+    
+    # Lấy nước tốt nhất
+    best_score, best_move, best_will_repeat = move_scores[0]
+    
+    # Nếu nước tốt nhất gây repetition VÀ có nước thứ 2
+    if best_will_repeat and len(move_scores) > 1:
+        second_score, second_move, second_will_repeat = move_scores[1]
+        
+        # Chỉ chọn nước thứ 2 nếu không tệ hơn quá 100 điểm (1 quân Tốt)
+        if best_score - second_score <= 100:
+            return second_move
+    
     return best_move
 
 def minimax(board: chess.Board, depth: int, maximizing: bool, root_color: bool, ply: int = 0) -> float:

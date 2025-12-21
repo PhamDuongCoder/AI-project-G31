@@ -1,5 +1,4 @@
-# Full optimization: Killer Moves + Move Ordering + Quiescence + Alpha-Beta
-"""This is the best_move.py """
+"""File best_move.py với đầy đủ chức năng"""
 
 import chess
 import random
@@ -33,18 +32,32 @@ def get_best_move_minimax(board: chess.Board, depth: int = 3) -> Optional[chess.
         return None
 
     root_color = board.turn
-    best_move: Optional[chess.Move] = legal_moves[0]
-    best_score = float('-inf')
+    
+    # Lưu tất cả nước đi và điểm vào list
+    move_scores = []
 
     for move in legal_moves:
         board.push(move)
+        will_repeat = board.is_repetition(count=2)
         score = minimax(board, depth - 1, False, float('-inf'), float('inf'), root_color, ply=1)
         board.pop()
+        
+        move_scores.append((score, move, will_repeat))
 
-        if score > best_score:
-            best_score = score
-            best_move = move
-
+    # Sắp xếp theo điểm giảm dần
+    move_scores.sort(key=lambda x: x[0], reverse=True)
+    
+    # Lấy nước tốt nhất
+    best_score, best_move, best_will_repeat = move_scores[0]
+    
+    # Nếu nước tốt nhất gây repetition VÀ có nước thứ 2
+    if best_will_repeat and len(move_scores) > 1:
+        second_score, second_move, second_will_repeat = move_scores[1]
+        
+        # Chỉ chọn nước thứ 2 nếu không tệ hơn quá 100 điểm (1 quân Tốt)
+        if best_score - second_score <= 100:
+            return second_move
+    
     return best_move
 
 MAX_PLY = 64
@@ -130,12 +143,12 @@ def score_move(board: chess.Board, move: chess.Move) -> int:
         aggressor = aggressor_piece.piece_type
 
         # Nếu victim_piece khác None, chắc chắn đây là nước bắt quân (capture)
-        score += 100 * PIECE_VALUES.get(victim, 0) - PIECE_VALUES.get(aggressor, 0)
+        score += PIECE_VALUES.get(victim, 0) - PIECE_VALUES.get(aggressor, 0)
     
     # 2. Kiểm tra Phong cấp (Promotion)
     if move.promotion is not None:
         # Cộng điểm cao cho phong cấp lên Hậu
-        score += 3000 + PIECE_VALUES.get(move.promotion, 0)
+        score += PIECE_VALUES.get(move.promotion, 0)
 
     return score
 
