@@ -5,7 +5,7 @@ from typing import Optional, Tuple, List
 import time
 import threading
 import traceback
-import best_move_5
+import best_move_1
 import game_state
 
 # Initialize Pygame
@@ -58,7 +58,7 @@ class ChessGame:
 
         # AI configuration & runtime state
         # Use depth from the AI module by default, allow override via self.ai_depth
-        self.ai_depth = getattr(best_move_5, 'INITIAL_DEPTH', 3)
+        self.ai_depth = getattr(best_move_1, 'INITIAL_DEPTH', 3)
         self.ai_thinking = False
         self.ai_thread: Optional[threading.Thread] = None
         self.ai_move_result: Optional[chess.Move] = None
@@ -100,7 +100,7 @@ class ChessGame:
             return None
         
         file = x // SQUARE_SIZE
-        rank = 7 - (y // SQUARE_SIZE)  # Flip rank for chess notation
+        rank = 7 - (y // SQUARE_SIZE)  
         
         if 0 <= file <= 7 and 0 <= rank <= 7:
             return chess.square(file, rank)
@@ -111,7 +111,7 @@ class ChessGame:
         file = chess.square_file(square)
         rank = chess.square_rank(square)
         x = file * SQUARE_SIZE
-        y = (7 - rank) * SQUARE_SIZE  # Flip rank for display
+        y = (7 - rank) * SQUARE_SIZE  
         return (x, y)
     
     def draw_board(self):
@@ -120,10 +120,10 @@ class ChessGame:
             for file in range(8):
                 square = chess.square(file, rank)
                 x = file * SQUARE_SIZE
-                y = (7 - rank) * SQUARE_SIZE  # Flip rank for display to match coordinate system
+                y = (7 - rank) * SQUARE_SIZE  
                 
                 # Alternate square colors
-                color = LIGHT_SQUARE if (file + rank) % 2 == 0 else DARK_SQUARE
+                color = DARK_SQUARE if (file + rank) % 2 == 0 else LIGHT_SQUARE
                 pygame.draw.rect(self.screen, color, (x, y, SQUARE_SIZE, SQUARE_SIZE))
                 
                 # Highlight selected square
@@ -497,7 +497,7 @@ class ChessGame:
         """Get a move for the AI using the best_move module (uses configured depth)."""
         # Call into the optimized AI module and pass the configured depth
         try:
-            return best_move_5.get_best_move_minimax(self.board, depth=self.ai_depth)
+            return best_move_1.get_best_move_minimax(self.board, depth=self.ai_depth)
         except Exception as e:
             # Higher-level code will handle/display the error; return None to avoid crashing
             print(f"Error generating AI move: {e}")
@@ -522,7 +522,7 @@ class ChessGame:
         def worker(board_snapshot, gen):
             start = time.perf_counter()
             try:
-                move = best_move_5.get_best_move_minimax(board_snapshot, depth=self.ai_depth)
+                move = best_move_1.get_best_move_minimax(board_snapshot, depth=self.ai_depth)
                 duration = time.perf_counter() - start
                 with self.ai_lock:
                     if gen != self.ai_generation:
