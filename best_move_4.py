@@ -1,8 +1,7 @@
 """File best_move_4, không có killer move heuristic, sắp xếp nước đi và quiescence search"""
 
 import chess
-import random
-from typing import List, Optional
+from typing import Optional
 import game_state
 
 # giá trị quân cờ

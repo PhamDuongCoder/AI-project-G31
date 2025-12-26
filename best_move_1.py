@@ -1,8 +1,7 @@
 """File best_move.py với đầy đủ chức năng"""
 
 import chess
-import random
-from typing import List, Optional
+from typing import Optional
 import game_state
 
 # giá trị quân cờ
