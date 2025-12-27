@@ -5,7 +5,7 @@ from typing import Optional, Tuple, List
 import time
 import threading
 import traceback
-import best_move_1
+import best_move
 import game_state
 
 # Initialize Pygame
@@ -58,7 +58,7 @@ class ChessGame:
 
         # AI configuration & runtime state
         # Use depth from the AI module by default, allow override via self.ai_depth
-        self.ai_depth = getattr(best_move_1, 'INITIAL_DEPTH', 3)
+        self.ai_depth = getattr(best_move, 'INITIAL_DEPTH', 3)
         self.ai_thinking = False
         self.ai_thread: Optional[threading.Thread] = None
         self.ai_move_result: Optional[chess.Move] = None
@@ -497,7 +497,7 @@ class ChessGame:
         """Get a move for the AI using the best_move module (uses configured depth)."""
         # Call into the optimized AI module and pass the configured depth
         try:
-            return best_move_1.get_best_move_minimax(self.board, depth=self.ai_depth)
+            return best_move.get_best_move_minimax(self.board, depth=self.ai_depth)
         except Exception as e:
             # Higher-level code will handle/display the error; return None to avoid crashing
             print(f"Error generating AI move: {e}")
@@ -522,7 +522,7 @@ class ChessGame:
         def worker(board_snapshot, gen):
             start = time.perf_counter()
             try:
-                move = best_move_1.get_best_move_minimax(board_snapshot, depth=self.ai_depth)
+                move = best_move.get_best_move_minimax(board_snapshot, depth=self.ai_depth)
                 duration = time.perf_counter() - start
                 with self.ai_lock:
                     if gen != self.ai_generation:

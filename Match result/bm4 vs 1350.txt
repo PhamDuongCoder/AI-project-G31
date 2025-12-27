@@ -1,5 +1,0 @@
-Result best_move_4 vs stockfish 1350
-Win:
-Lost:
-Draw:
-Average thinking time:
