@@ -2,8 +2,7 @@
 Shared game state module.
 
 This module contains global game state variables that are shared between
-chess_game.py and best_move.py to avoid circular imports and provide
-a clean interface for state management.
+chess_game.py and best_move.py 
 """
 
 # Game phase indicator:

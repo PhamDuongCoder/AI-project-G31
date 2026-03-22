@@ -576,18 +576,9 @@ def evaluate_endgame(board: chess.Board, root_color: bool) -> float:
             
             # Thưởng điểm thêm nếu kiểm soát hầu hết các ô (gần chiếu hết)
             if controlled_count >= 5:  # Vua có tối đa 8 ô adjacent
-                endgame_score += 2.0  # Gần chiếu hết rồi!
-
-    # --- 2. LOGIC CŨ: KING VS KING ---
-    if root_king is not None and opp_king is not None:
-        root_king_dist = abs(chess.square_file(root_king) - chess.square_file(opp_king)) + \
-                         abs(chess.square_rank(root_king) - chess.square_rank(opp_king))
-        opp_king_dist = abs(chess.square_file(opp_king) - chess.square_file(root_king)) + \
-                        abs(chess.square_rank(opp_king) - chess.square_rank(root_king))
+                endgame_score += 2.0  
         
-        endgame_score += (opp_king_dist - root_king_dist) * 0.1
-        
-    # --- 3. PASSED PAWN EVALUATION (TỐT THÔNG) ---
+    # --- 2. PASSED PAWN EVALUATION (TỐT THÔNG) ---
     most_advanced_passed_pawn = {chess.WHITE: (-1, None), chess.BLACK: (-1, None)}
 
     for color in [chess.WHITE, chess.BLACK]:
@@ -647,7 +638,7 @@ def evaluate_endgame(board: chess.Board, root_color: bool) -> float:
         king_file = chess.square_file(root_king)
         king_rank = chess.square_rank(root_king)
         
-        # 3a. Hỗ trợ Tốt thông phe mình
+        # 2a. Hỗ trợ Tốt thông phe mình
         _, best_sq = most_advanced_passed_pawn[root_color]
         if best_sq is not None:
             pawn_file = chess.square_file(best_sq)
@@ -655,7 +646,7 @@ def evaluate_endgame(board: chess.Board, root_color: bool) -> float:
             distance = abs(king_file - pawn_file) + abs(king_rank - pawn_rank)
             endgame_score += (14 - distance) * 0.1
 
-        # 3b. Chặn Tốt thông phe địch
+        # 2b. Chặn Tốt thông phe địch
         _, best_sq_enemy = most_advanced_passed_pawn[not root_color]
         if best_sq_enemy is not None:
             pawn_file = chess.square_file(best_sq_enemy)
