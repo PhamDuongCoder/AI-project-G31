@@ -35,7 +35,7 @@ python chess_game.py
 4. **Game controls**:
    - Click "New Game" to restart
    - Click "Switch Color" to change your color and restart
-5. **AI moves**: The AI will automatically make random legal moves on its turn
+5. **AI moves**: The AI will automatically make moves on its turn
 
 ## Piece Images
 
